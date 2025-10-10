@@ -3,9 +3,10 @@ from fastapi import HTTPException
 from config.db_config import get_db_connection
 from models.user_model import User
 from fastapi.encoders import jsonable_encoder
+from datetime import datetime
 
 class UserController:
-        
+     #create user in the table Users   
     def create_user(self, user: User):   
         try:
             conn = get_db_connection()
@@ -20,8 +21,8 @@ class UserController:
             conn.rollback()
         finally:
             conn.close()
-        
-
+    
+    #get user by id
     def get_user(self, user_id: int):
         try:
             conn = get_db_connection()
@@ -57,7 +58,8 @@ class UserController:
             conn.rollback()
         finally:
             conn.close()
-       
+    
+    #get all users   
     def get_users(self):
         try:
             conn = get_db_connection()
@@ -88,7 +90,36 @@ class UserController:
         finally:
             conn.close()
     
+    #update user by id
+    def update_user(user_id: int, user: User):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        now = datetime.now()
+        cursor.execute("""
+            UPDATE user
+            SET user_name=%s, password=%s, first_name=%s, middle_name=%s, email=%s,
+                date_birthday=%s, address=%s, phone=%s, specialty=%s,
+                id_type_document=%s, id_rol=%s, updated_at=%s
+            WHERE id=%s
+        """, (
+            user.user_name, user.password, user.first_name, user.middle_name, user.email,
+            user.date_birthday, user.address, user.phone, user.specialty,
+            user.id_type_document, user.id_rol, now, user_id
+        ))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"message": "User updated successfully"}
+    
+    #delete user by id
+    def delete_user(user_id: int):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM user WHERE id=%s", (user_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"message": "User deleted successfully"}
     
        
 
-##user_controller = UserController()
