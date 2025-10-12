@@ -1,0 +1,58 @@
+Metadata-Version: 2.1
+Name: mds
+Version: 0.0.6
+Summary: Markdown Server
+Home-page: https://github.com/samdixon/mds
+Author: Samuel Dixon
+Author-email: sdixon@posteo.net
+License: MIT
+Platform: UNKNOWN
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Requires-Python: >=3.6.0
+Description-Content-Type: text/markdown
+Requires-Dist: bottle
+Requires-Dist: mistune
+Provides-Extra: dev
+Requires-Dist: pytest ; extra == 'dev'
+Requires-Dist: neovim ; extra == 'dev'
+
+
+# mds - markdown server
+**M**ark**d**own **S**erver is a simple Python application that serves local markdown files in your browser for simple viewing and editing. Markdown server is still in early development. 
+
+### Installation
+Via pip:
+
+`pip3 install mds`
+
+Via setup.py:
+
+`pip3 install mistune bottle`
+
+`python3 setup.py install`
+
+### Usage
+To use markdown server you simply need to point it to a directory where you keep markdown files. It will recursively search through the directory for files with a `*.md` extension. These can then be viewed and edited in the browser at localhost:3000. 
+
+Serve notes on default port:
+```
+mds ~/notes
+```
+
+Serve notes on specific ports:
+```
+mds -p 8080 ~/notes
+```
+
+### Contributing
+Contributing is welcome, just make a PR.
+
+### License
+MIT
+
+

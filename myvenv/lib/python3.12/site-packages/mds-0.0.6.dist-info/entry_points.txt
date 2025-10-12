@@ -1,0 +1,4 @@
+
+        [console_scripts]
+        mds = mds.__main__:main
+    
