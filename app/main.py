@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from routes.user_routes import router as user_router
+from routes.rol_routes import routerRole as role_router
+from routes.type_document_routes import router as type_document_router
+from routes.auth_router import router as router_login
 from fastapi.middleware.cors import CORSMiddleware
 
 
