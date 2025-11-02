@@ -1,17 +1,16 @@
 from fastapi import HTTPException
-from app.config.db_config import get_db_connection
+from config.db_config import get_db_connection
 from models.analysis import Analysis
 
 # Crear un nuevo análisis
 def create_analysis(analysis: Analysis):
     conn = get_db_connection()
     cursor = conn.cursor()
-
     query = """
-        INSERT INTO analysis (id_user, name, description, created_at, updated_at)
-        VALUES (%s, %s, %s, NOW(), NOW())
+        INSERT INTO analysis (id_user, name, description, url_image, result_ia, observation_doctor, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
     """
-    values = (analysis.id_user, analysis.name, analysis.description)
+    values = (analysis.id_user, analysis.name, analysis.description, getattr(analysis, 'url_image', None), getattr(analysis, 'result_ia', None), getattr(analysis, 'observation_doctor', None))
     cursor.execute(query, values)
     conn.commit()
 
@@ -46,13 +45,20 @@ def get_analysis_by_id(analysis_id: int):
 def update_analysis(analysis_id: int, analysis: Analysis):
     conn = get_db_connection()
     cursor = conn.cursor()
-
     query = """
         UPDATE analysis
-        SET id_user = %s, name = %s, description = %s, updated_at = NOW()
+        SET id_user = %s, name = %s, description = %s, url_image = %s, result_ia = %s, observation_doctor = %s, updated_at = NOW()
         WHERE id = %s
     """
-    values = (analysis.id_user, analysis.name, analysis.description, analysis_id)
+    values = (
+        analysis.id_user,
+        analysis.name,
+        analysis.description,
+        getattr(analysis, 'url_image', None),
+        getattr(analysis, 'result_ia', None),
+        getattr(analysis, 'observation_doctor', None),
+        analysis_id,
+    )
     cursor.execute(query, values)
     conn.commit()
 
@@ -70,3 +76,23 @@ def delete_analysis(analysis_id: int):
     cursor.close()
     conn.close()
     return {"message": "Análisis eliminado correctamente"}
+
+
+def update_analysis_observation(analysis_id: int, observation: str):
+    """Actualiza únicamente la observación del doctor para un análisis existente."""
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE analysis SET observation_doctor = %s, updated_at = NOW() WHERE id = %s", (observation, analysis_id))
+        conn.commit()
+        cur.close()
+
+        cur2 = conn.cursor(dictionary=True)
+        cur2.execute("SELECT * FROM analysis WHERE id = %s", (analysis_id,))
+        row = cur2.fetchone()
+        cur2.close()
+        if not row:
+            raise HTTPException(status_code=404, detail="Análisis no encontrado")
+        return row
+    finally:
+        conn.close()

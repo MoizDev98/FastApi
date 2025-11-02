@@ -16,5 +16,6 @@ class User(BaseModel):
     id_type_document: Optional[int] = None
     num_document: Optional[str] = None
     id_rol: Optional[int] = None
+    genero: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
