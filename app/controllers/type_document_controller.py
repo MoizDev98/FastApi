@@ -23,15 +23,30 @@ def create_type_document(doc: TypeDocument) -> Dict[str, Any]:
         conn.close()
 
 def get_all_type_documents() -> List[Dict[str, Any]]:
-    conn = get_db_connection()
+    conn = None
+    cur = None
     try:
+        conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM type_document ORDER BY id DESC")
         rows = cur.fetchall()
-        cur.close()
+        # log for debugging
+        print(f"🔎 type_document rows fetched: {len(rows) if rows is not None else 0}")
         return rows
+    except Exception as e:
+        print("❌ Error fetching type_documents:", e)
+        raise
     finally:
-        conn.close()
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 def get_type_document_by_id(id: int) -> Dict[str, Any]:
     conn = get_db_connection()

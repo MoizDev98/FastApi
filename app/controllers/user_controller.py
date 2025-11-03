@@ -56,7 +56,12 @@ class UserController:
             conn.commit()
             new_id = cursor.lastrowid
 
-            return {"message": "Usuario creado correctamente", "id": new_id}
+            # devolver la fila creada
+            cur2 = conn.cursor(dictionary=True)
+            cur2.execute("SELECT * FROM user WHERE id = %s", (new_id,))
+            row = cur2.fetchone()
+            cur2.close()
+            return jsonable_encoder(row)
 
         except mysql.connector.Error as err:
             if conn:
@@ -158,45 +163,77 @@ class UserController:
                 conn.close()
 
     # Actualizar usuario
-    def update_user(self, user_id: int, user: User):
+    def update_user(self, user_id: int, payload: dict):
+        """Actualizar usuario: acepta un dict parcial con los campos a modificar.
+        Si un campo no está presente, conserva el valor actual en la DB.
+        """
         conn = None
         cursor = None
         try:
+            print("▶ update_user payload:", payload)
+
             conn = get_db_connection()
-            cursor = conn.cursor()
-            now = datetime.now()
+            cursor = conn.cursor(dictionary=True)
+
+            # Obtener valores actuales
+            cursor.execute("SELECT * FROM user WHERE id = %s AND state = 1", (user_id,))
+            current = cursor.fetchone()
+            if not current:
+                raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+            # Para cada campo, si está presente en payload usar ese valor, sino mantener el actual
+            def use(key):
+                return payload[key] if key in payload else current.get(key)
+
+            # normalizaciones
+            num_document = None
+            if 'num_document' in payload and payload.get('num_document') not in (None, ''):
+                try:
+                    num_document = int(payload.get('num_document'))
+                except Exception:
+                    num_document = None
+            else:
+                num_document = current.get('num_document')
+
+            date_birth = payload.get('date_birth') if 'date_birth' in payload else current.get('date_birth')
 
             sql = """
                 UPDATE user
                 SET user_name=%s, password=%s, full_name=%s, last_name=%s, email=%s,
                     date_birth=%s, address=%s, phone=%s, id_type_document=%s,
-                    num_document=%s, id_rol=%s, genero=%s, updated_at=%s
+                    num_document=%s, id_rol=%s, genero=%s, updated_at=CURRENT_TIMESTAMP
                 WHERE id=%s AND state = 1
             """
+
             values = (
-                user.user_name,
-                user.password,
-                user.full_name,
-                user.last_name,
-                user.email,
-                user.date_birth,
-                user.address,
-                user.phone,
-                user.id_type_document,
-                user.num_document,
-                user.id_rol,
-                getattr(user, 'genero', None),
-                now,
+                use('user_name'),
+                use('password'),
+                use('full_name'),
+                use('last_name'),
+                use('email'),
+                date_birth,
+                use('address'),
+                use('phone'),
+                use('id_type_document'),
+                num_document,
+                use('id_rol'),
+                payload.get('genero') if 'genero' in payload else current.get('genero'),
                 user_id,
             )
 
+            cursor = conn.cursor()
             cursor.execute(sql, values)
             conn.commit()
 
             if cursor.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-            return {"message": "Usuario actualizado correctamente"}
+            # Devolver la fila actualizada
+            cur2 = conn.cursor(dictionary=True)
+            cur2.execute("SELECT * FROM user WHERE id = %s", (user_id,))
+            updated = cur2.fetchone()
+            cur2.close()
+            return jsonable_encoder(updated)
 
         except mysql.connector.Error as err:
             if conn:

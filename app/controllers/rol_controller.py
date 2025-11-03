@@ -69,6 +69,17 @@ def create_role(rol):
 def update_role(id: int, rol):
     conn = get_db_connection()
     cursor = conn.cursor()
+    # Debug: mostrar payload recibido para facilitar diagnóstico
+    try:
+        print("▶ update_role called for id=", id)
+        # 'rol' puede ser un Pydantic model; intentamos mostrar su dict si existe
+        try:
+            payload = rol.dict()
+        except Exception:
+            payload = dict(rol)
+        print("▶ payload:", payload)
+    except Exception:
+        pass
     cursor.execute(
         "UPDATE rol SET name = %s, description = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s AND state = 1",
         (rol.name, rol.description, id)
