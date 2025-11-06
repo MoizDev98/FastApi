@@ -1,0 +1,2 @@
+-- Archivo eliminado: este cambio ya está aplicado en la BD.
+-- Mantener vacío para evitar aplicar migraciones obsoletas.
