@@ -3,7 +3,6 @@ from fastapi import FastAPI
 from routes.user_routes import router as user_router
 from routes.rol_routes import routerRole as role_router
 from routes.type_document_routes import router as type_document_router
-from routes.auth_router import router as router_login
 from routes.appointment_routes import router as appointment_router  # Nueva ruta
 from routes.module_routes import router as module_router
 from routes.module_x_rol_routes import router as module_x_rol_router
@@ -14,6 +13,7 @@ from routes.users_x_attribute_routes import router as users_x_attribute_router
 from routes.analysis_routes import router as analysis_router
 from routes.patient_routes import router as patient_router
 from fastapi.middleware.cors import CORSMiddleware
+from routes.auth_routes import router as auth_router
 
 app = FastAPI()
 
@@ -28,9 +28,9 @@ app.add_middleware(
 # ----------------------
 
 app.include_router(user_router)
+app.include_router(auth_router)
 app.include_router(role_router)
 app.include_router(type_document_router)
-app.include_router(router_login)
 app.include_router(appointment_router)  # Nueva ruta
 app.include_router(module_router)
 app.include_router(module_x_rol_router)

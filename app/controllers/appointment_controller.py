@@ -4,18 +4,17 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 def create_appointment(data) -> Dict[str, Any]:
-    """
-    data: objeto Pydantic AppointmentCreate o similar (tiene id_user, appointment_date, id_state)
-    """
+    """Crea una cita. Soporta id_user_doctor opcional."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         sql = """
-            INSERT INTO appointment (id_user, appointment_date, id_state, created_at, updated_at)
-            VALUES (%s, %s, %s, NOW(), NOW())
+            INSERT INTO appointment (id_user, id_user_doctor, appointment_date, id_state, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, NOW(), NOW())
         """
         values = (
             data.id_user,
+            getattr(data, "id_user_doctor", None),
             data.appointment_date,
             data.id_state
         )
@@ -24,7 +23,6 @@ def create_appointment(data) -> Dict[str, Any]:
         new_id = cursor.lastrowid
         cursor.close()
 
-        # devolver la fila recién creada como dict
         cur2 = conn.cursor(dictionary=True)
         cur2.execute("SELECT * FROM appointment WHERE id_appointment = %s", (new_id,))
         row = cur2.fetchone()
@@ -66,6 +64,7 @@ def update_appointment(appointment_id: int, data) -> Optional[Dict[str, Any]]:
 
     field_map = {
         "id_user": "id_user",
+        "id_user_doctor": "id_user_doctor",
         "appointment_date": "appointment_date",
         "id_state": "id_state",
     }
@@ -109,5 +108,48 @@ def delete_appointment(appointment_id: int) -> bool:
         affected = cur.rowcount
         cur.close()
         return affected > 0
+    finally:
+        conn.close()
+
+def get_filtered_appointments(
+    doctor_id: Optional[int] = None,
+    state: Optional[int] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    limit: int = 200,
+    offset: int = 0
+) -> List[Dict[str, Any]]:
+    """Devuelve citas filtradas con soporte de paginación básica."""
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(dictionary=True)
+        where = []
+        values: List[Any] = []
+
+        if doctor_id is not None:
+            where.append("id_user_doctor = %s")
+            values.append(doctor_id)
+        if state is not None:
+            where.append("id_state = %s")
+            values.append(state)
+        if date_from is not None:
+            where.append("appointment_date >= %s")
+            values.append(date_from)
+        if date_to is not None:
+            where.append("appointment_date <= %s")
+            values.append(date_to)
+
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+        sql = f"""
+            SELECT * FROM appointment
+            {where_sql}
+            ORDER BY appointment_date DESC
+            LIMIT %s OFFSET %s
+        """
+        values.extend([limit, offset])
+        cur.execute(sql, tuple(values))
+        rows = cur.fetchall()
+        cur.close()
+        return rows
     finally:
         conn.close()
