@@ -35,8 +35,24 @@ def get_all_appointments() -> List[Dict[str, Any]]:
     conn = get_db_connection()
     try:
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM appointment ORDER BY appointment_date DESC")
+        sql = """
+            SELECT a.id_appointment, a.id_user, a.id_user_doctor, a.appointment_date, 
+                   a.id_state, a.created_at, a.updated_at,
+                   CONCAT(COALESCE(u.full_name, ''), ' ', COALESCE(u.last_name, '')) AS patient_name
+            FROM appointment a
+            LEFT JOIN user u ON a.id_user = u.id
+            ORDER BY a.appointment_date DESC
+        """
+        cur.execute(sql)
         rows = cur.fetchall()
+        
+        # Limpiar espacios en blanco del patient_name
+        for row in rows:
+            if row.get('patient_name'):
+                row['patient_name'] = row['patient_name'].strip()
+                if not row['patient_name']:
+                    row['patient_name'] = None
+        
         cur.close()
         return rows
     finally:
@@ -119,7 +135,7 @@ def get_filtered_appointments(
     limit: int = 200,
     offset: int = 0
 ) -> List[Dict[str, Any]]:
-    """Devuelve citas filtradas con soporte de paginación básica."""
+    """Devuelve citas filtradas con soporte de paginación básica, incluyendo el nombre del paciente."""
     conn = get_db_connection()
     try:
         cur = conn.cursor(dictionary=True)
@@ -127,28 +143,40 @@ def get_filtered_appointments(
         values: List[Any] = []
 
         if doctor_id is not None:
-            where.append("id_user_doctor = %s")
+            where.append("a.id_user_doctor = %s")
             values.append(doctor_id)
         if state is not None:
-            where.append("id_state = %s")
+            where.append("a.id_state = %s")
             values.append(state)
         if date_from is not None:
-            where.append("appointment_date >= %s")
+            where.append("a.appointment_date >= %s")
             values.append(date_from)
         if date_to is not None:
-            where.append("appointment_date <= %s")
+            where.append("a.appointment_date <= %s")
             values.append(date_to)
 
         where_sql = ("WHERE " + " AND ".join(where)) if where else ""
         sql = f"""
-            SELECT * FROM appointment
+            SELECT a.id_appointment, a.id_user, a.id_user_doctor, a.appointment_date, 
+                   a.id_state, a.created_at, a.updated_at,
+                   CONCAT(COALESCE(u.full_name, ''), ' ', COALESCE(u.last_name, '')) AS patient_name
+            FROM appointment a
+            LEFT JOIN user u ON a.id_user = u.id
             {where_sql}
-            ORDER BY appointment_date DESC
+            ORDER BY a.appointment_date DESC
             LIMIT %s OFFSET %s
         """
         values.extend([limit, offset])
         cur.execute(sql, tuple(values))
         rows = cur.fetchall()
+        
+        # Limpiar espacios en blanco del patient_name
+        for row in rows:
+            if row.get('patient_name'):
+                row['patient_name'] = row['patient_name'].strip()
+                if not row['patient_name']:
+                    row['patient_name'] = None
+        
         cur.close()
         return rows
     finally:

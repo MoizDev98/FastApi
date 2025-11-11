@@ -16,10 +16,6 @@ def get_all():
 def get_one(analysis_id: int):
     return controller.get_analysis_by_id(analysis_id)
 
-@router.get("/by_user/{id_user}")
-def get_by_user(id_user: int):
-    return controller.get_analysis_by_user(id_user)
-
 @router.put("/{analysis_id}")
 def update(analysis_id: int, analysis: Analysis):
     return controller.update_analysis(analysis_id, analysis)

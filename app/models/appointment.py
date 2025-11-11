@@ -22,6 +22,7 @@ class AppointmentOut(BaseModel):
     id_state: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    patient_name: Optional[str] = None  # Nombre del paciente desde el JOIN
 
     class Config:
         orm_mode = True

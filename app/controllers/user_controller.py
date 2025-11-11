@@ -3,12 +3,12 @@ from fastapi import HTTPException
 from config.db_config import get_db_connection
 from models.user_model import User
 from fastapi.encoders import jsonable_encoder
-from datetime import datetime
-from datetime import date
+from datetime import datetime, date
+import bcrypt
 
 
 class UserController:
-    # Crear usuario
+    # ... (create_user, get_user_by_id, get_all_users sin cambios) ...
     def create_user(self, user: User):
         conn = None
         cursor = None
@@ -16,6 +16,9 @@ class UserController:
             print("📥 Datos recibidos del frontend:", user.dict())  # 👈 agrega esto
             conn = get_db_connection()
             cursor = conn.cursor()
+
+            # Hashear la contraseña antes de guardarla
+            hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt())
 
             sql = """
                 INSERT INTO `user` (
@@ -37,7 +40,7 @@ class UserController:
 
             values = (
                 user.user_name,
-                user.password,
+                hashed_password.decode('utf-8'), # Guardar como string
                 user.full_name,
                 user.last_name,
                 user.email,
@@ -81,7 +84,13 @@ class UserController:
         try:
             conn = get_db_connection()
             cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM user WHERE id = %s AND state = 1", (user_id,))
+            # Unir con type_document para obtener el nombre
+            cursor.execute("""
+                SELECT u.*, td.name as type_document_name
+                FROM user u
+                LEFT JOIN type_document td ON u.id_type_document = td.id
+                WHERE u.id = %s AND u.state = 1
+            """, (user_id,))
             result = cursor.fetchone()
 
             if not result:
@@ -161,12 +170,8 @@ class UserController:
                 cursor.close()
             if conn:
                 conn.close()
-
     # Actualizar usuario
     def update_user(self, user_id: int, payload: dict):
-        """Actualizar usuario: acepta un dict parcial con los campos a modificar.
-        Si un campo no está presente, conserva el valor actual en la DB.
-        """
         conn = None
         cursor = None
         try:
@@ -181,56 +186,47 @@ class UserController:
             if not current:
                 raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-            # Para cada campo, si está presente en payload usar ese valor, sino mantener el actual
-            def use(key):
-                return payload[key] if key in payload else current.get(key)
+            # Construir la consulta dinámicamente
+            update_fields = []
+            values = []
 
-            # normalizaciones
-            num_document = None
-            if 'num_document' in payload and payload.get('num_document') not in (None, ''):
-                try:
-                    num_document = int(payload.get('num_document'))
-                except Exception:
-                    num_document = None
-            else:
-                num_document = current.get('num_document')
+            for key, value in payload.items():
+                if key in ["id", "created_at", "updated_at", "state"]:
+                    continue # Ignorar campos no modificables
 
-            date_birth = payload.get('date_birth') if 'date_birth' in payload else current.get('date_birth')
+                if key == "password":
+                    if value: # Solo actualizar si se provee una nueva contraseña
+                        hashed_password = bcrypt.hashpw(value.encode('utf-8'), bcrypt.gensalt())
+                        update_fields.append("password = %s")
+                        values.append(hashed_password.decode('utf-8'))
+                else:
+                    update_fields.append(f"{key} = %s")
+                    values.append(value)
+            
+            if not update_fields:
+                return jsonable_encoder(current) # No hay nada que actualizar
 
-            sql = """
-                UPDATE user
-                SET user_name=%s, password=%s, full_name=%s, last_name=%s, email=%s,
-                    date_birth=%s, address=%s, phone=%s, id_type_document=%s,
-                    num_document=%s, id_rol=%s, genero=%s, updated_at=CURRENT_TIMESTAMP
-                WHERE id=%s AND state = 1
-            """
+            update_fields.append("updated_at = CURRENT_TIMESTAMP")
 
-            values = (
-                use('user_name'),
-                use('password'),
-                use('full_name'),
-                use('last_name'),
-                use('email'),
-                date_birth,
-                use('address'),
-                use('phone'),
-                use('id_type_document'),
-                num_document,
-                use('id_rol'),
-                payload.get('genero') if 'genero' in payload else current.get('genero'),
-                user_id,
-            )
+            sql = f"UPDATE user SET {', '.join(update_fields)} WHERE id = %s AND state = 1"
+            values.append(user_id)
 
             cursor = conn.cursor()
-            cursor.execute(sql, values)
+            cursor.execute(sql, tuple(values))
             conn.commit()
 
             if cursor.rowcount == 0:
-                raise HTTPException(status_code=404, detail="Usuario no encontrado")
+                # Esto puede pasar si el usuario fue eliminado mientras tanto
+                raise HTTPException(status_code=404, detail="Usuario no encontrado o no se realizaron cambios.")
 
-            # Devolver la fila actualizada
+            # Devolver la fila actualizada con el nombre del tipo de documento
             cur2 = conn.cursor(dictionary=True)
-            cur2.execute("SELECT * FROM user WHERE id = %s", (user_id,))
+            cur2.execute("""
+                SELECT u.*, td.name as type_document_name
+                FROM user u
+                LEFT JOIN type_document td ON u.id_type_document = td.id
+                WHERE u.id = %s
+            """, (user_id,))
             updated = cur2.fetchone()
             cur2.close()
             return jsonable_encoder(updated)
