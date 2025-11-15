@@ -23,9 +23,9 @@ class UserController:
             sql = """
                 INSERT INTO `user` (
                     user_name, password, full_name, last_name, email, date_birth,
-                    address, phone, id_type_document, num_document, id_rol, genero, state
+                    address, phone, id_type_document, num_document, id_rol, id_clinic, genero, state
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1)
             """
 
             # Asegura que num_document sea numérico y fecha válida
@@ -50,6 +50,7 @@ class UserController:
                 user.id_type_document,
                 num_doc,
                 user.id_rol,
+                getattr(user, 'id_clinic', None),
                 getattr(user, 'genero', None),
             )
 
