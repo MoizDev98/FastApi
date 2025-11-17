@@ -79,4 +79,20 @@ def me(current_user: dict = Depends(get_current_user)):
     # No exponer password
     current_user = dict(current_user)
     current_user.pop("password", None)
+    
+    # Obtener los módulos/permisos del rol del usuario
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        """SELECT m.id, m.name, m.description 
+           FROM module m
+           JOIN module_x_rol mx ON m.id = mx.id_module
+           WHERE mx.id_rol = %s AND mx.state = 1 AND m.state = 1""",
+        (current_user.get("id_rol"),)
+    )
+    modules = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    current_user["modules"] = modules
     return current_user
