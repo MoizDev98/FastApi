@@ -80,9 +80,17 @@ def me(current_user: dict = Depends(get_current_user)):
     current_user = dict(current_user)
     current_user.pop("password", None)
     
-    # Obtener los módulos/permisos del rol del usuario
+    # Obtener el nombre del rol y los módulos/permisos
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
+    
+    # Obtener nombre del rol
+    cur.execute("SELECT name FROM rol WHERE id = %s", (current_user.get("id_rol"),))
+    rol = cur.fetchone()
+    if rol:
+        current_user["rol_name"] = rol["name"]
+    
+    # Obtener módulos asignados al rol
     cur.execute(
         """SELECT m.id, m.name, m.description 
            FROM module m

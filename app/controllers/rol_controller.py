@@ -48,19 +48,40 @@ def get_role_by_id(id: int):
 
 def create_role(rol):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Verificar si el nombre del rol ya existe
     cursor.execute(
-        "INSERT INTO rol (name, description, state) VALUES (%s, %s, 1)",
-        (rol.name, rol.description)
+        "SELECT id FROM rol WHERE name = %s AND state = 1",
+        (rol.name,)
+    )
+    existing = cursor.fetchone()
+    if existing:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"El rol '{rol.name}' ya existe")
+    
+    # Crear el rol
+    cursor.execute(
+        "INSERT INTO rol (name, description, state, created_at, updated_at) "
+        "VALUES (%s, %s, 1, NOW(), NOW())",
+        (rol.name, rol.description or '')
     )
     role_id = cursor.lastrowid
     
+    # Asignar módulos si se proporcionaron
     if hasattr(rol, 'permisos') and rol.permisos:
         for module_id in rol.permisos:
+            # Verificar que el módulo existe
             cursor.execute(
-                "INSERT INTO module_x_rol (id_rol, id_module, state) VALUES (%s, %s, 1)",
-                (role_id, module_id)
+                "SELECT id FROM module WHERE id = %s AND state = 1",
+                (module_id,)
             )
+            if cursor.fetchone():
+                cursor.execute(
+                    "INSERT INTO module_x_rol (id_rol, id_module, state, created_at, updated_at) "
+                    "VALUES (%s, %s, 1, NOW(), NOW())",
+                    (role_id, module_id)
+                )
     
     conn.commit()
     conn.close()
@@ -68,36 +89,55 @@ def create_role(rol):
 
 def update_role(id: int, rol):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    # Debug: mostrar payload recibido para facilitar diagnóstico
-    try:
-        print("▶ update_role called for id=", id)
-        # 'rol' puede ser un Pydantic model; intentamos mostrar su dict si existe
-        try:
-            payload = rol.dict()
-        except Exception:
-            payload = dict(rol)
-        print("▶ payload:", payload)
-    except Exception:
-        pass
+    cursor = conn.cursor(dictionary=True)
+    
+    # Verificar que el rol existe
     cursor.execute(
-        "UPDATE rol SET name = %s, description = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s AND state = 1",
-        (rol.name, rol.description, id)
+        "SELECT id, name FROM rol WHERE id = %s AND state = 1",
+        (id,)
     )
-    if cursor.rowcount == 0:
+    existing_role = cursor.fetchone()
+    if not existing_role:
         conn.close()
         raise HTTPException(status_code=404, detail="Rol no encontrado")
     
-    # Eliminar permisos existentes
-    cursor.execute("DELETE FROM module_x_rol WHERE id_rol = %s", (id,))
+    # Verificar si hay otro rol con el mismo nombre (excluyendo el actual)
+    cursor.execute(
+        "SELECT id FROM rol WHERE name = %s AND id != %s AND state = 1",
+        (rol.name, id)
+    )
+    duplicate = cursor.fetchone()
+    if duplicate:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Ya existe otro rol con el nombre '{rol.name}'")
+    
+    # Actualizar el rol
+    cursor.execute(
+        "UPDATE rol SET name = %s, description = %s, updated_at = NOW() "
+        "WHERE id = %s AND state = 1",
+        (rol.name, rol.description or '', id)
+    )
+    
+    # Eliminar permisos existentes (soft delete)
+    cursor.execute(
+        "UPDATE module_x_rol SET state = 0, updated_at = NOW() WHERE id_rol = %s",
+        (id,)
+    )
     
     # Insertar nuevos permisos
     if hasattr(rol, 'permisos') and rol.permisos:
         for module_id in rol.permisos:
+            # Verificar que el módulo existe
             cursor.execute(
-                "INSERT INTO module_x_rol (id_rol, id_module, state) VALUES (%s, %s, 1)",
-                (id, module_id)
+                "SELECT id FROM module WHERE id = %s AND state = 1",
+                (module_id,)
             )
+            if cursor.fetchone():
+                cursor.execute(
+                    "INSERT INTO module_x_rol (id_rol, id_module, state, created_at, updated_at) "
+                    "VALUES (%s, %s, 1, NOW(), NOW())",
+                    (id, module_id)
+                )
     
     conn.commit()
     conn.close()
@@ -105,13 +145,52 @@ def update_role(id: int, rol):
 
 def delete_role(id: int):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE rol SET state = 0, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (id,))
-    if cursor.rowcount == 0:
+    cursor = conn.cursor(dictionary=True)
+    
+    # Verificar que el rol existe y no es un rol base protegido
+    cursor.execute(
+        "SELECT id, name FROM rol WHERE id = %s AND state = 1",
+        (id,)
+    )
+    role = cursor.fetchone()
+    if not role:
         conn.close()
         raise HTTPException(status_code=404, detail="Rol no encontrado")
     
-    cursor.execute("UPDATE module_x_rol SET state = 0 WHERE id_rol = %s", (id,))
+    # Proteger roles base del sistema (Admin, Doctor, patient, secretary)
+    BASE_ROLES = [1, 2, 3, 4]
+    if id in BASE_ROLES:
+        conn.close()
+        raise HTTPException(
+            status_code=403, 
+            detail=f"No se puede eliminar el rol base '{role['name']}'"
+        )
+    
+    # Verificar si hay usuarios asignados a este rol
+    cursor.execute(
+        "SELECT COUNT(*) as count FROM user WHERE id_rol = %s AND state = 1",
+        (id,)
+    )
+    user_count = cursor.fetchone()
+    if user_count and user_count['count'] > 0:
+        conn.close()
+        raise HTTPException(
+            status_code=400, 
+            detail=f"No se puede eliminar el rol porque tiene {user_count['count']} usuario(s) asignado(s)"
+        )
+    
+    # Eliminar el rol (soft delete)
+    cursor.execute(
+        "UPDATE rol SET state = 0, updated_at = NOW() WHERE id = %s",
+        (id,)
+    )
+    
+    # Eliminar permisos asociados (soft delete)
+    cursor.execute(
+        "UPDATE module_x_rol SET state = 0, updated_at = NOW() WHERE id_rol = %s",
+        (id,)
+    )
+    
     conn.commit()
     conn.close()
     return {"message": "Rol eliminado exitosamente"}
