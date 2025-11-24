@@ -2,8 +2,12 @@
 from config.db_config import get_db_connection
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from services.email_service import EmailService
+from fastapi import HTTPException
 
-def create_appointment(data) -> Dict[str, Any]:
+email_service = EmailService()
+
+def create_appointment(data, created_by_id: int = None) -> Dict[str, Any]:
     """Crea una cita. Soporta id_user_doctor opcional."""
     conn = get_db_connection()
     try:
@@ -27,6 +31,30 @@ def create_appointment(data) -> Dict[str, Any]:
         cur2.execute("SELECT * FROM appointment WHERE id_appointment = %s", (new_id,))
         row = cur2.fetchone()
         cur2.close()
+        
+        # Enviar email de notificación al paciente
+        try:
+            cur3 = conn.cursor(dictionary=True)
+            cur3.execute("""
+                SELECT u.email, u.full_name, d.full_name as doctor_name
+                FROM user u
+                LEFT JOIN user d ON d.id_user = %s
+                WHERE u.id_user = %s
+            """, (getattr(data, "id_user_doctor", None), data.id_user))
+            user_data = cur3.fetchone()
+            cur3.close()
+            
+            if user_data:
+                email_service.send_new_appointment(
+                    to_email=user_data['email'],
+                    patient_name=user_data['full_name'],
+                    appointment_date=data.appointment_date.strftime("%d/%m/%Y %H:%M"),
+                    doctor_name=user_data.get('doctor_name', 'Por asignar')
+                )
+        except Exception as e:
+            print(f"Error enviando email: {e}")
+            # No fallar si el email no se envía
+        
         return row
     finally:
         conn.close()
@@ -179,5 +207,51 @@ def get_filtered_appointments(
         
         cur.close()
         return rows
+    finally:
+        conn.close()
+
+
+def update_appointment_status(appointment_id: int, new_state_id: int, changed_by_id: int):
+    """Actualiza el estado de una cita y envía notificación por email al paciente"""
+    conn = get_db_connection()
+    try:
+        # Obtener información de la cita
+        cur = conn.cursor(dictionary=True)
+        query = """
+            SELECT a.*, u.email as patient_email, u.full_name as patient_name,
+                   s.name as state_name, d.full_name as doctor_name
+            FROM appointment a
+            JOIN user u ON a.id_user = u.id_user
+            LEFT JOIN state_appointment s ON s.id_state_appointment = %s
+            LEFT JOIN user d ON a.id_user_doctor = d.id_user
+            WHERE a.id_appointment = %s
+        """
+        cur.execute(query, (new_state_id, appointment_id))
+        appointment_data = cur.fetchone()
+        
+        if not appointment_data:
+            raise HTTPException(status_code=404, detail="Cita no encontrada")
+        
+        # Actualizar el estado
+        cur.execute(
+            "UPDATE appointment SET id_state = %s, updated_at = NOW() WHERE id_appointment = %s",
+            (new_state_id, appointment_id)
+        )
+        conn.commit()
+        
+        # Enviar email al paciente
+        try:
+            email_service.send_appointment_status_changed(
+                to_email=appointment_data['patient_email'],
+                patient_name=appointment_data['patient_name'],
+                appointment_date=appointment_data['appointment_date'].strftime("%d/%m/%Y %H:%M"),
+                new_status=appointment_data['state_name'] or 'Actualizado',
+                changed_by=appointment_data['doctor_name'] or 'Personal médico'
+            )
+        except Exception as e:
+            print(f"Error enviando email: {e}")
+        
+        cur.close()
+        return {"message": "Estado actualizado correctamente", "appointment_id": appointment_id}
     finally:
         conn.close()

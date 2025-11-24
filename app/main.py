@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from routes.user_routes import router as user_router
 from routes.rol_routes import routerRole as role_router
 from routes.type_document_routes import router as type_document_router
-from routes.appointment_routes import router as appointment_router  # Nueva ruta
+from routes.appointment_routes import router as appointment_router
 from routes.module_routes import router as module_router
 from routes.module_x_rol_routes import router as module_x_rol_router
 from routes.disease_type_routes import router as disease_type_router

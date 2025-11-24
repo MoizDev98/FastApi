@@ -1,6 +1,9 @@
 from fastapi import HTTPException
 from config.db_config import get_db_connection
 from models.analysis import Analysis
+from services.email_service import EmailService
+
+email_service = EmailService()
 
 # NOTA: La tabla real usa id_analysis como PK y NO tiene name/description.
 # Para evitar romper el frontend, devolvemos "id" como alias de id_analysis.
@@ -196,7 +199,84 @@ def delete_analysis(analysis_id: int):
         cur.execute("DELETE FROM analysis WHERE id_analysis = %s", (analysis_id,))
         conn.commit()
         cur.close()
-        return {"message": "Análisis eliminado correctamente"}
+        return {"message": "Analysis deleted successfully"}
+    finally:
+        conn.close()
+
+
+def update_analysis_status(analysis_id: int, new_state_id: int, changed_by_id: int):
+    """Actualiza el estado de un análisis y envía notificación por email al paciente"""
+    conn = get_db_connection()
+    try:
+        # Obtener información del análisis y el paciente
+        cur = conn.cursor(dictionary=True)
+        query = """
+            SELECT a.*, u.email as patient_email, u.full_name as patient_name,
+                   s.name as state_name, d.full_name as doctor_name
+            FROM analysis a
+            JOIN user u ON a.id_user = u.id_user
+            LEFT JOIN state_analysis s ON s.id_state_analysis = %s
+            LEFT JOIN user d ON a.id_user_doctor = d.id_user
+            WHERE a.id_analysis = %s
+        """
+        cur.execute(query, (new_state_id, analysis_id))
+        analysis_data = cur.fetchone()
+        
+        if not analysis_data:
+            raise HTTPException(status_code=404, detail="Análisis no encontrado")
+        
+        # Actualizar el estado
+        cur.execute(
+            "UPDATE analysis SET id_state_analysis = %s, updated_at = NOW() WHERE id_analysis = %s",
+            (new_state_id, analysis_id)
+        )
+        conn.commit()
+        
+        # Enviar email al paciente
+        try:
+            email_service.send_analysis_status_changed(
+                to_email=analysis_data['patient_email'],
+                patient_name=analysis_data['patient_name'],
+                analysis_id=analysis_id,
+                new_status=analysis_data['state_name'] or 'Actualizado',
+                changed_by=analysis_data['doctor_name'] or 'Doctor'
+            )
+        except Exception as e:
+            print(f"Error enviando email: {e}")
+            # No fallar si el email no se envía
+        
+        cur.close()
+        return {"message": "Estado actualizado correctamente", "analysis_id": analysis_id}
+    finally:
+        conn.close()
+
+
+def upload_analysis_image(user_id: int, image_path: str):
+    """Registra la subida de una imagen de análisis y envía confirmación por email"""
+    conn = get_db_connection()
+    try:
+        # Obtener email del usuario
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT email, full_name FROM user WHERE id_user = %s", (user_id,))
+        user_data = cur.fetchone()
+        
+        if not user_data:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+        # Aquí podrías crear un registro del análisis o actualizar uno existente
+        # Por ahora solo enviaremos el email de confirmación
+        
+        try:
+            email_service.send_analysis_uploaded_confirmation(
+                to_email=user_data['email'],
+                patient_name=user_data['full_name'],
+                upload_date=datetime.now().strftime("%d/%m/%Y %H:%M")
+            )
+        except Exception as e:
+            print(f"Error enviando email: {e}")
+        
+        cur.close()
+        return {"message": "Imagen subida correctamente", "image_path": image_path}
     finally:
         conn.close()
 

@@ -64,3 +64,5 @@ zope.interface==6.1
 # Added to ensure FastAPI CLI and ASGI server are available for local dev
 fastapi
 uvicorn[standard]
+python-dotenv
+mysql-connector-python

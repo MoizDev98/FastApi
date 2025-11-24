@@ -5,6 +5,9 @@ from models.user_model import User
 from fastapi.encoders import jsonable_encoder
 from datetime import datetime, date
 import bcrypt
+from services.email_service import EmailService
+
+email_service = EmailService()
 
 
 class UserController:
@@ -172,7 +175,7 @@ class UserController:
             if conn:
                 conn.close()
     # Actualizar usuario
-    def update_user(self, user_id: int, payload: dict):
+    def update_user(self, user_id: int, payload: dict, updated_by_id: int = None):
         conn = None
         cursor = None
         try:
@@ -187,6 +190,12 @@ class UserController:
             if not current:
                 raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
+            # Rastrear cambios para notificaciones por email
+            password_changed = False
+            profile_changed = False
+            role_changed = False
+            state_changed = False
+
             # Construir la consulta dinámicamente
             update_fields = []
             values = []
@@ -200,7 +209,16 @@ class UserController:
                         hashed_password = bcrypt.hashpw(value.encode('utf-8'), bcrypt.gensalt())
                         update_fields.append("password = %s")
                         values.append(hashed_password.decode('utf-8'))
+                        password_changed = True
+                elif key == "id_rol":
+                    if value != current.get('id_rol'):
+                        role_changed = True
+                    update_fields.append(f"{key} = %s")
+                    values.append(value)
                 else:
+                    # Cualquier otro cambio cuenta como cambio de perfil
+                    if value != current.get(key):
+                        profile_changed = True
                     update_fields.append(f"{key} = %s")
                     values.append(value)
             
@@ -223,13 +241,38 @@ class UserController:
             # Devolver la fila actualizada con el nombre del tipo de documento
             cur2 = conn.cursor(dictionary=True)
             cur2.execute("""
-                SELECT u.*, td.name as type_document_name
+                SELECT u.*, td.name as type_document_name, r.rol_name
                 FROM user u
                 LEFT JOIN type_document td ON u.id_type_document = td.id
+                LEFT JOIN rol r ON u.id_rol = r.id_rol
                 WHERE u.id = %s
             """, (user_id,))
             updated = cur2.fetchone()
             cur2.close()
+            
+            # Enviar notificaciones por email según los cambios
+            try:
+                if updated and updated.get('email'):
+                    if password_changed:
+                        email_service.send_password_changed(
+                            to_email=updated['email'],
+                            user_name=updated.get('full_name', 'Usuario')
+                        )
+                    elif role_changed:
+                        email_service.send_role_changed(
+                            to_email=updated['email'],
+                            user_name=updated.get('full_name', 'Usuario'),
+                            new_role=updated.get('rol_name', 'Nuevo rol')
+                        )
+                    elif profile_changed:
+                        email_service.send_profile_updated(
+                            to_email=updated['email'],
+                            user_name=updated.get('full_name', 'Usuario')
+                        )
+            except Exception as e:
+                print(f"Error enviando email de notificación: {e}")
+                # No fallar la actualización si el email falla
+            
             return jsonable_encoder(updated)
 
         except mysql.connector.Error as err:

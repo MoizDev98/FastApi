@@ -75,7 +75,19 @@ def update_appointment(appointment_id: int, appointment: AppointmentUpdate):
 
 @router.delete("/{appointment_id}")
 def delete_appointment(appointment_id: int):
-    ok = appointment_controller.delete_appointment(appointment_id)
+    return appointment_controller.delete_appointment(appointment_id)
+
+
+@router.put("/{appointment_id}/status")
+def update_status(appointment_id: int, payload: dict):
+    """Actualiza el estado de una cita y envía email al paciente"""
+    new_state = payload.get("id_state")
+    changed_by = payload.get("changed_by_id", 1)  # ID del usuario que hace el cambio
+    
+    if new_state is None:
+        return {"error": "id_state is required in payload"}
+    
+    return appointment_controller.update_appointment_status(appointment_id, new_state, changed_by)
     if not ok:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
     return {"message": "Cita eliminada correctamente"}
