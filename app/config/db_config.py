@@ -5,5 +5,5 @@ def get_db_connection():
         host="localhost",
         user="root",
         password="",
-        database="db_medical_project"
+        database="medical_project"
     )
