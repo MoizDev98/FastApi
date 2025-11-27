@@ -99,12 +99,7 @@ def get_all_analysis():
     finally:
         conn.close()
 
-# Obtener todos los análisis de un paciente por id_user
-from fastapi import HTTPException
-from app.database import get_db_connection
-
-# ...
-
+# Obtener todos los análisis pertenecientes a un paciente
 def get_analysis_by_user(user_id: int):
     conn = get_db_connection()
     try:
@@ -118,20 +113,18 @@ def get_analysis_by_user(user_id: int):
               id_disease,
               id_user_doctor,
               date,
-              status,
               result_ia,
               confidence,
               observation_doctor,
               url_image,
               created_at,
               updated_at,
-              state,
-              id_state_analysis
+              state
             FROM analysis
             WHERE id_user = %s AND state = 1
             ORDER BY created_at DESC
             """,
-            (user_id,),
+            (user_id,)
         )
         rows = cur.fetchall()
         cur.close()
@@ -349,5 +342,3 @@ def update_analysis_observation(analysis_id: int, observation: str):
         return row
     finally:
         conn.close()
-from datetime import datetime
-

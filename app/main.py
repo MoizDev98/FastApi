@@ -15,9 +15,26 @@ from routes.patient_routes import router as patient_router
 from fastapi.middleware.cors import CORSMiddleware
 from routes.auth_routes import router as auth_router
 from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+import os
+
 
 
 app = FastAPI()
+
+# === NUEVO: servir carpeta uploads ===
+BASE_DIR = Path(__file__).resolve().parent  # -> /.../Backend/FastApi/app
+UPLOADS_DIR = BASE_DIR / "uploads"          # -> /.../Backend/FastApi/app/uploads
+
+# Crear la carpeta si no existe (por si acaso)
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+# Montar /uploads -> carpeta física app/uploads
+app.mount(
+    "/uploads",                            # URL donde se accederá
+    StaticFiles(directory=str(UPLOADS_DIR)),
+    name="uploads"
+)   
 
 # --- ⚙️ Ajuste aquí ---
 app.add_middleware(
