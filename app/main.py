@@ -14,6 +14,8 @@ from routes.analysis_routes import router as analysis_router
 from routes.patient_routes import router as patient_router
 from fastapi.middleware.cors import CORSMiddleware
 from routes.auth_routes import router as auth_router
+from fastapi.staticfiles import StaticFiles
+
 
 app = FastAPI()
 
@@ -40,6 +42,10 @@ app.include_router(state_analysis_router)
 app.include_router(users_x_attribute_router)
 app.include_router(analysis_router)
 app.include_router(patient_router)
+
+# Servir la carpeta uploads como archivos estáticos
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 #app.include_router()
 

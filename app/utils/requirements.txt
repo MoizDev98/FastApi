@@ -1,0 +1,15 @@
+# Requirements para el proyecto de análisis de imágenes médicas con IA
+
+# Framework web
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Procesamiento de imágenes
+Pillow==10.1.0
+
+# PyTorch (Deep Learning)
+torch==2.1.0
+torchvision==0.16.0
+
+# Utilidades
+python-multipart==0.0.6

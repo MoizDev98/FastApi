@@ -32,12 +32,7 @@ def get_one(analysis_id: int):
 
 @router.put("/{analysis_id}")
 def update(analysis_id: int, analysis: Analysis):from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from typing import Optional
 
-from models.analysis import Analysis
-import controllers.analysis_controller as controller
-from controllers import analysis_ia_controller
-from models.analysis_model import AnalysisOut
 
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
 
@@ -77,6 +72,18 @@ def get_one(analysis_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/user/{user_id}")
+def get_by_user(user_id: int):
+    """Devuelve todos los análisis de un paciente concreto"""
+    try:
+        return controller.get_analysis_by_user(user_id)
+    except HTTPException:
+        # Re-lanzar si viene de controller
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.put("/{analysis_id}")
@@ -231,3 +238,13 @@ async def upload_and_analyze_image(
         file=file,
         id_user=id_user,
     )
+
+
+# @router.get("/user/{user_id}")
+# def get_by_user(user_id: int):
+#     """Obtiene todos los análisis de un paciente específico"""
+#     try:
+#         return controller.get_analysis_by_user(user_id)
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
